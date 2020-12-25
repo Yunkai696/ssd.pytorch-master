@@ -9,7 +9,9 @@ class Detect(Function):
     apply non-maximum suppression to location predictions based on conf
     scores and threshold to a top_k number of output predictions for both
     confidence score and locations.
+    在模型中, 我们为了加快训练速度, 促使模型收敛, 因此会将相应的 box 的坐标转换成与图片size成比例的小数形式, 因此, 无法直接将模型产生的预测结果可视化. 下面, 我们首先会通过接受 Detect 类来说明如何解析预测结果, 同时, 还会根据源码中提过的 demo 文件来接受如何将对应的结果可视化出来, 首先, 来看一下 Detect 类的定义和实现:
     """
+    # 测试阶段的最后一层, 负责解码预测结果, 应用nms选出合适的框和对应类别的置信度.
     def __init__(self, num_classes, bkg_label, top_k, conf_thresh, nms_thresh):
         self.num_classes = num_classes
         self.background_label = bkg_label
@@ -30,6 +32,9 @@ class Detect(Function):
                 Shape: [batch*num_priors,num_classes]
             prior_data: (tensor) Prior boxes and variances from priorbox layers
                 Shape: [1,num_priors,4]
+            # loc_data: [batch, num_priors, 4], [batch, 8732, 4]
+            # conf_data: [batch, num_priors, 21], [batch, 8732, 21]
+            # prior_data: [num_priors, 4], [8732, 4]
         """
         num = loc_data.size(0)  # batch size
         num_priors = prior_data.size(0)

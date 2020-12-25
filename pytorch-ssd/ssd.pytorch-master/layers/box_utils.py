@@ -10,9 +10,9 @@ def point_form(boxes):
     Return:
         boxes: (tensor) Converted xmin, ymin, xmax, ymax form of boxes.
     """
+    # 将(cx, cy, w, h) 形式的box坐标转换成 (xmin, ymin, xmax, ymax) 形式
     return torch.cat((boxes[:, :2] - boxes[:, 2:]/2,     # xmin, ymin
                      boxes[:, :2] + boxes[:, 2:]/2), 1)  # xmax, ymax
-
 
 def center_size(boxes):
     """ Convert prior_boxes to (cx, cy, w, h)
@@ -37,6 +37,13 @@ def intersect(box_a, box_b):
     Return:
       (tensor) intersection area, Shape: [A,B].
     """
+    # box_a: (truths), (tensor:[num_obj, 4]) numm_obj是当前图片物体的数量
+    # box_b: (priors), (tensor:[num_priors, 4], 即[8732, 4])
+    # return: (tensor:[num_obj, num_priors]) box_a 与 box_b 两个集合中任意两个 box 的交集,
+    #         其中res[i][j]代表box_a中第i个box与box_b中第j个box的交集.(非对称矩阵)
+    # 思路: 先将两个box的维度扩展至相同维度: [num_obj, num_priors, 4], 然后计算面积的交集
+    # 两个box的交集可以看成是一个新的box, 该box的左上角坐标是box_a和box_b左上角坐标的较大值, 右下角坐标是box_a和box_b的右下角坐标的较小值
+
     A = box_a.size(0)
     B = box_b.size(0)
     max_xy = torch.min(box_a[:, 2:].unsqueeze(1).expand(A, B, 2),
@@ -46,11 +53,14 @@ def intersect(box_a, box_b):
     inter = torch.clamp((max_xy - min_xy), min=0)
     return inter[:, :, 0] * inter[:, :, 1]
 
-
+# 计算IOU的
 def jaccard(box_a, box_b):
-    """Compute the jaccard overlap of two sets of boxes.  The jaccard overlap
-    is simply the intersection over union of two boxes.  Here we operate on
-    ground truth boxes and default boxes.
+    # A ∩ B / A ∪ B = A ∩ B / (area(A) + area(B) - A ∩ B)
+    # box_a: (truths), (tensor:[num_obj, 4])
+    # box_b: (priors), (tensor:[num_priors, 4], 即[8732, 4])
+    # return: (tensor:[num_obj, num_priors]), 代表了 box_a 和 box_b 两个集合中任意两个 box之间的交并比
+
+    """Compute the jaccard overlap of two sets of boxes.  The jaccard overlap is simply the intersection over union of two boxes.  Here we operate on ground truth boxes and default boxes.
     E.g.:
         A ∩ B / A ∪ B = A ∩ B / (area(A) + area(B) - A ∩ B)
     Args:
@@ -59,19 +69,19 @@ def jaccard(box_a, box_b):
     Return:
         jaccard overlap: (tensor) Shape: [box_a.size(0), box_b.size(0)]
     """
-    inter = intersect(box_a, box_b)
+    inter = intersect(box_a, box_b)# 求任意两个box的交集面积, shape为[A, B], 即[num_obj, num_priors]
     area_a = ((box_a[:, 2]-box_a[:, 0]) *
               (box_a[:, 3]-box_a[:, 1])).unsqueeze(1).expand_as(inter)  # [A,B]
     area_b = ((box_b[:, 2]-box_b[:, 0]) *
               (box_b[:, 3]-box_b[:, 1])).unsqueeze(0).expand_as(inter)  # [A,B]
     union = area_a + area_b - inter
-    return inter / union  # [A,B]
+    return inter / union # [A, B], 返回任意两个box之间的交并比, res[i][j] 代表box_a中的第i个box与box_b中的第j个box之间的交并比.
 
 
+# match:匹配ground truth与预测框
 def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
-    """Match each prior box with the ground truth box of the highest jaccard
-    overlap, encode the bounding boxes, then return the matched indices
-    corresponding to both confidence and location preds.
+    """Match each prior box with the ground truth box of the highest jaccard overlap,
+    encode the bounding boxes, then return the matched indices corresponding to both confidence and location preds.
     Args:
         threshold: (float) The overlap threshold used when mathing boxes.
         truths: (tensor) Ground truth boxes, Shape: [num_obj, num_priors].
@@ -85,11 +95,18 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
     Return:
         The matched indices corresponding to 1)location and 2)confidence preds.
     """
-    # jaccard index
-    overlaps = jaccard(
-        truths,
-        point_form(priors)
-    )
+    # threshold: (float) 确定是否匹配的交并比阈值
+    # truths: (tensor: [num_obj, 4]) 存储真实 box 的边框坐标
+    # priors: (tensor: [num_priors, 4], 即[8732, 4]), 存储推荐框的坐标, 注意, 此时的框是 default box, 而不是 SSD 网络预测出来的框的坐标, 预测的结果存储在 loc_data中, 其 shape 为[num_obj, 8732, 4].
+    # variances: cfg['variance'], [0.1, 0.2], 用于将坐标转换成方便训练的形式(参考RCNN系列对边框坐标的处理)
+    # labels: (tensor: [num_obj]), 代表了每个真实 box 对应的类别的编号
+    # loc_t: (tensor: [batches, 8732, 4]),
+    # conf_t: (tensor: [batches, 8732]),
+    # idx: batches 中图片的序号, 标识当前正在处理的 image 在 batches 中的序号
+    overlaps = jaccard(truths,
+                       point_form(priors)
+                       )
+    # [A, B], 返回任意两个box之间的交并比, overlaps[i][j] 代表box_a中的第i个box与box_b中的第j个box之间的交并比.
     # (Bipartite Matching)
     # [1,num_objects] best prior for each ground truth
     best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
@@ -113,6 +130,11 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
 
 
 def encode(matched, priors, variances):
+    # 对边框坐标进行编码, 需要宽度方差和高度方差两个参数, 具体公式可以参见原文公式(2)
+    # matched: [num_priors,4] 存储的是与priorbox匹配的gtbox的坐标. 形式为(xmin, ymin, xmax, ymax)
+    # priors: [num_priors, 4] 存储的是priorbox的坐标. 形式为(cx, cy, w, h)
+    # return : encoded boxes: [num_priors, 4]
+
     """Encode the variances from the priorbox layers into the ground truth boxes
     we have matched (based on jaccard overlap) with the prior boxes.
     Args:
@@ -174,7 +196,7 @@ def log_sum_exp(x):
 # Ported to PyTorch by Max deGroot (02/01/2017)
 def nms(boxes, scores, overlap=0.5, top_k=200):
     """Apply non-maximum suppression at test time to avoid detecting too many
-    overlapping bounding boxes for a given object.
+    overlapping(重叠) bounding boxes for a given object.
     Args:
         boxes: (tensor) The location preds for the img, Shape: [num_priors,4].
         scores: (tensor) The class predscores for the img, Shape:[num_priors].
@@ -191,10 +213,12 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
     y1 = boxes[:, 1]
     x2 = boxes[:, 2]
     y2 = boxes[:, 3]
+    # 每一个检测框的面积
     area = torch.mul(x2 - x1, y2 - y1)
     v, idx = scores.sort(0)  # sort in ascending order
     # I = I[v >= 0.01]
     idx = idx[-top_k:]  # indices of the top-k largest vals
+    # 得到相交区域,左上及右下
     xx1 = boxes.new()
     yy1 = boxes.new()
     xx2 = boxes.new()
@@ -234,6 +258,6 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
         rem_areas = torch.index_select(area, 0, idx)  # load remaining areas)
         union = (rem_areas - inter) + area[i]
         IoU = inter/union  # store result in iou
-        # keep only elements with an IoU <= overlap
+        # keep only elements with an IoU <= overlap(阈值的box)
         idx = idx[IoU.le(overlap)]
     return keep, count

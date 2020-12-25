@@ -20,7 +20,7 @@ class SSD(nn.Module):
         :param extras: 将输出结果送到multibox loc和conf layers的额外的层
         :param head:"multibox head", 包含一系列的loc和conf卷积层.
         head=(loc_layers, conf_layers)
-        :param num_classes:
+        :param num_classes:voc数据集的标识
         """
         super(SSD, self).__init__()
         self.phase = phase
@@ -288,7 +288,6 @@ mbox = {
     '300': [4, 6, 6, 6, 4, 4],  # number of boxes per feature map location
     '512': [],
 }
-
 
 # ... 构建模型函数, 调用上面的函数进行构建
 # num_classes是什么？？？？？
