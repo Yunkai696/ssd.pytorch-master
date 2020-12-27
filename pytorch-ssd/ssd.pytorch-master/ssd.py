@@ -99,6 +99,7 @@ class SSD(nn.Module):
             # loc: [b×w1×h1×4*4, b×w2×h2×6*4, b×w3×h3×6*4, b×w4×h4×6*4, b×w5×h5×4*4, b×w6×h6×4*4]
             # conf: [b×w1×h1×4*C, b×w2×h2×6*C, b×w3×h3×6*C, b×w4×h4×6*C, b×w5×h5×4*C, b×w6×h6×4*C] C为num_classes
             # 数据做完行和列的转换的话，就变得不连续了！！！，所以要用contiguous进行转换
+            # https://blog.csdn.net/xidaoliang/article/details/106079093
             loc.append(l(x).permute(0, 2, 3, 1).contiguous())
             conf.append(c(x).permute(0, 2, 3, 1).contiguous())
 
@@ -290,7 +291,8 @@ mbox = {
 }
 
 # ... 构建模型函数, 调用上面的函数进行构建
-# num_classes是什么？？？？？
+# num_classes是什么？voc数据集的标识
+# size：SSD300的表现效果比较好
 def build_ssd(phase, size=300, num_classes=21):
     # 训练或者测试阶段，or not print（"error"）
     if phase != "test" and phase != "train":
@@ -311,4 +313,4 @@ def build_ssd(phase, size=300, num_classes=21):
     return SSD(phase, size, base_, extras_, head_, num_classes)
 
 
-add_extras(extras[str(300)], 1024)
+

@@ -32,7 +32,7 @@ voc = {
 class PriorBox(object):
     """Compute priorbox coordinates in center-offset form for each source feature map.
     """
-    # cfg是什么意思？？？？下边的自变量的每个参数什么意思？
+    # cfg是什么意思？？？？下边的自变量的每个参数什么意思？464464
     def __init__(self, cfg):
         super(PriorBox, self).__init__()
         # 图片的大小

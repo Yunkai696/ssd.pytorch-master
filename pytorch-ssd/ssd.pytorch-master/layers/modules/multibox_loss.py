@@ -80,7 +80,7 @@ class MultiBoxLoss(nn.Module):
 
         # 将priors(default boxes)和ground truth boxes匹配
         # match priors (default boxes) and ground truth boxes
-        loc_t = torch.Tensor(num, num_priors, 4)  # shape:[batch_size, 8732, 4]
+        loc_t = torch.Tensor(., num_priors, 4)  # shape:[batch_size, 8732, 4]
         conf_t = torch.LongTensor(num, num_priors)  # shape:[batch_size, 8732]
         for idx in range(num):
             # targets是列表, 列表的长度为batch_size, 列表中每个元素为一个 tensor,
